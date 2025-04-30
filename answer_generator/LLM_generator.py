@@ -9,7 +9,7 @@ from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 
 class LLMGenerator:
-    def __init__(self, api_key: str = None, model: str = "gpt-4"):
+    def __init__(self, api_key: str = None, model: str = "gpt-4o"):
         load_dotenv()
         self.api_key = api_key or os.getenv("OPENAI_API_KEY")
         if not self.api_key:
