@@ -97,7 +97,7 @@ class RAGSearcher:
 
 def main():
     # 使用提供的 API 密钥
-    api_key = "4909fb91e8fd3de0d2d3a7948c5d568ee63ec9bc0a4a4f3e6b22d2babfa99588"
+    api_key = "serpapi(search api)"
     searcher = RAGSearcher(api_key=api_key)
     searcher.process_all_paths()
 
