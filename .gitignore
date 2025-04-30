@@ -1,12 +1,31 @@
+# Environment variables
+.env
+
 # Python
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
+*.so
+.Python
+env/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+*.egg-info/
+.installed.cfg
+*.egg
 
-# 输出目录
-aspects_outputs/
-retrieval/outputs/
-answer_generator/outputs/
+# Virtual Environment
+venv/
+ENV/
 
 # IDE
 .idea/
@@ -14,11 +33,14 @@ answer_generator/outputs/
 *.swp
 *.swo
 
-# 环境文件
-.env
-.venv
-venv/
-ENV/
+# Output directories
+outputs/
+aspects_outputs/
+retrieval/outputs/
+answer_generator/outputs/
+
+# Logs
+*.log
 
 # 系统文件
 .DS_Store
