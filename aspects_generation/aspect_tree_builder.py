@@ -27,6 +27,7 @@ Given the aspect: "{node_content}", decide whether it needs to be further broken
 
 Answer only "Yes" if it needs further breakdown, or "No" if it is already specific enough.
 """
+
         try:
             print("正在调用 OpenAI API 判断是否需要继续细化...")
             response = self.aspect_gen.model_client.chat.completions.create(

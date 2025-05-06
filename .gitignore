@@ -46,3 +46,5 @@ answer_generator/outputs/
 .DS_Store
 Thumbs.db
 
+#data
+data/

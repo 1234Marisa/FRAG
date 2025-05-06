@@ -1,35 +1,39 @@
 import os
 import json
 import time
-from typing import Dict, List, Optional
+import asyncio
+import aiohttp
+from typing import Dict, List, Optional, Set
 from urllib.parse import urlparse
 import re
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.chrome.service import Service
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
 from bs4 import BeautifulSoup
+from fake_useragent import UserAgent
+from datetime import datetime
+import random
 
 class PageCrawler:
-    def __init__(self, output_dir: str = "retrieval/outputs"):
+    def __init__(self, output_dir: str = "retrieval/outputs", max_concurrent: int = 5):
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.output_dir = os.path.join(self.PROJECT_ROOT, output_dir)
-        self.crawled_urls = set()
-        self.content_results = {}
+        self.crawled_urls: Set[str] = set()
+        self.content_results: Dict = {}
+        self.max_concurrent = max_concurrent
+        self.semaphore = asyncio.Semaphore(max_concurrent)
+        
         # 确保输出目录存在
         os.makedirs(self.output_dir, exist_ok=True)
         
-        # 初始化 Selenium
-        self.chrome_options = Options()
-        self.chrome_options.add_argument('--headless')  # 无头模式
-        self.chrome_options.add_argument('--disable-gpu')
-        self.chrome_options.add_argument('--no-sandbox')
-        self.chrome_options.add_argument('--disable-dev-shm-usage')
-        self.chrome_options.add_argument('--window-size=1920,1080')
+        # 初始化 UserAgent
+        self.ua = UserAgent()
+        
+        # 代理列表（示例，需要替换为实际可用的代理）
+        self.proxies = [
+            None,  # 直连
+            # 添加您的代理服务器
+            # "http://proxy1.example.com:8080",
+            # "http://proxy2.example.com:8080",
+        ]
         
     def _is_valid_url(self, url: str) -> bool:
         """检查URL是否有效"""
@@ -39,45 +43,42 @@ class PageCrawler:
         except:
             return False
             
-    def _get_article_content(self, url: str, max_retries: int = 3) -> Optional[Dict]:
-        """使用 Selenium 提取文章内容"""
-        driver = None
+    def _get_headers(self) -> Dict:
+        """生成随机请求头"""
+        return {
+            'User-Agent': self.ua.random,
+            'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.5',
+            'Accept-Encoding': 'gzip, deflate, br',
+            'Connection': 'keep-alive',
+            'Upgrade-Insecure-Requests': '1',
+            'Cache-Control': 'max-age=0',
+            'TE': 'Trailers',
+            'DNT': '1',
+        }
+        
+    async def _get_article_content(self, url: str, session: aiohttp.ClientSession, max_retries: int = 3) -> Optional[Dict]:
+        """使用 aiohttp 异步提取文章内容"""
+        headers = self._get_headers()
+        proxy = random.choice(self.proxies)
+        
         for attempt in range(max_retries):
             try:
-                if driver:
-                    driver.quit()
-                
-                # 使用 webdriver_manager 自动安装和管理 Chrome 驱动
-                service = Service(ChromeDriverManager().install())
-                driver = webdriver.Chrome(service=service, options=self.chrome_options)
-                driver.set_page_load_timeout(20)
-                
                 print(f"正在加载页面 ({attempt + 1}/{max_retries}): {url}")
-                driver.get(url)
+                async with self.semaphore:  # 限制并发数
+                    async with session.get(url, headers=headers, proxy=proxy, timeout=10) as response:
+                        response.raise_for_status()
+                        html = await response.text()
                 
-                # 等待页面加载
-                time.sleep(5)  # 等待动态内容加载
-                
-                # 尝试等待主要内容加载
-                try:
-                    WebDriverWait(driver, 10).until(
-                        EC.presence_of_element_located((By.TAG_NAME, "article"))
-                        or EC.presence_of_element_located((By.TAG_NAME, "main"))
-                        or EC.presence_of_element_located((By.TAG_NAME, "p"))
-                    )
-                except:
-                    print("等待内容加载超时，使用当前页面内容")
-                
-                # 获取页面内容
-                page_source = driver.page_source
-                soup = BeautifulSoup(page_source, 'html.parser')
+                # 使用 BeautifulSoup 解析 HTML
+                soup = BeautifulSoup(html, 'html.parser')
                 
                 # 移除不需要的元素
-                for element in soup(["script", "style", "nav", "footer", "header", "aside"]):
+                for element in soup(["script", "style", "nav", "footer", "header", "aside", "iframe", "form"]):
                     element.decompose()
                 
                 # 获取标题
-                title = driver.title
+                title = soup.title.string if soup.title else url
                 
                 # 获取正文内容
                 article = soup.find('article') or soup.find('main') or soup.find('div', class_=re.compile('content|article|post|entry'))
@@ -95,31 +96,26 @@ class PageCrawler:
                 # 检查是否成功提取到内容
                 if not text or len(text) < 50:
                     print(f"提取的内容过少，尝试重试 ({attempt + 1}/{max_retries})")
-                    time.sleep(2)
+                    await asyncio.sleep(1)
                     continue
                 
                 return {
                     'title': title,
-                    'text': text[:5000] if len(text) > 5000 else text,  # 限制内容长度
-                    'url': url
+                    'text': text[:10000] if len(text) > 10000 else text,  # 限制内容长度
+                    'url': url,
+                    'crawl_time': datetime.now().isoformat()
                 }
                 
             except Exception as e:
                 print(f"提取文章内容时出错 ({attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
-                    time.sleep(2)
+                    await asyncio.sleep(1)
                     continue
-            finally:
-                if driver:
-                    try:
-                        driver.quit()
-                    except:
-                        pass
         
         return None
             
-    def crawl_url(self, url: str) -> Optional[Dict]:
-        """抓取单个URL的内容"""
+    async def crawl_url(self, url: str, session: aiohttp.ClientSession) -> Optional[Dict]:
+        """异步抓取单个URL的内容"""
         if not self._is_valid_url(url):
             print(f"无效的URL: {url}")
             return None
@@ -129,7 +125,7 @@ class PageCrawler:
             return self.content_results.get(url)
             
         print(f"正在抓取: {url}")
-        content = self._get_article_content(url)
+        content = await self._get_article_content(url, session)
         
         if content:
             self.crawled_urls.add(url)
@@ -138,16 +134,20 @@ class PageCrawler:
             
         return None
         
-    def process_all_urls(self, urls: List[str] = None):
-        """处理所有URL"""
+    async def process_urls(self, urls: List[str]):
+        """异步处理所有URL"""
+        async with aiohttp.ClientSession() as session:
+            tasks = [self.crawl_url(url, session) for url in urls]
+            await asyncio.gather(*tasks)
+            
+    async def process_all_urls(self, urls: List[str] = None):
+        """处理所有URL的主函数"""
         if urls is None:
             # 从检索结果中获取URL
             urls = self._load_urls_from_search_results()
             
-        urls=urls[:6]
-        for url in urls:
-            self.crawl_url(url)
-            time.sleep(1)  # 避免请求过于频繁
+        # 运行异步任务
+        await self.process_urls(urls)
             
     def _load_urls_from_search_results(self) -> List[str]:
         """从检索结果中加载URL"""
@@ -187,12 +187,12 @@ class PageCrawler:
             print(f"加载内容结果时出错: {e}")
             return {}
 
-def main():
+async def main():
     # 创建爬虫实例
     crawler = PageCrawler()
     
     # 处理所有URL
-    crawler.process_all_urls()
+    await crawler.process_all_urls()
     
     # 保存结果
     crawler.save_content_results()
@@ -200,4 +200,4 @@ def main():
     print("网页内容抓取完成！")
 
 if __name__ == "__main__":
-    main() 
+    asyncio.run(main()) 

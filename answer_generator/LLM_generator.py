@@ -3,9 +3,6 @@ import json
 import time
 from typing import List, Dict, Optional
 from openai import OpenAI
-import numpy as np
-from sklearn.feature_extraction.text import TfidfVectorizer
-from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
 
 class LLMGenerator:
@@ -19,57 +16,39 @@ class LLMGenerator:
         
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/content_results.json")
+        self.content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/refined_content.json")
         
         # 加载内容
         self.content_data = self._load_content_data()
         
-    def _load_content_data(self) -> Dict:
-        """加载抓取的内容数据"""
+    def _load_content_data(self) -> List[Dict]:
+        """加载精炼后的内容数据"""
         try:
             with open(self.content_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
         except FileNotFoundError:
             print(f"警告：找不到内容文件 {self.content_path}")
-            return {}
+            return []
         except json.JSONDecodeError:
             print(f"警告：内容文件 {self.content_path} 格式错误")
-            return {}
+            return []
         except Exception as e:
             print(f"警告：加载内容数据时出错: {e}")
-            return {}
+            return []
             
-    def _create_context(self, query: str, top_k: int = 3) -> str:
+    def _create_context(self, query: str) -> str:
         """创建上下文"""
         if not self.content_data:
             return ""
             
-        # 提取所有文本
-        texts = []
-        urls = []
-        for url, content in self.content_data.items():
-            texts.append(content['text'])
-            urls.append(url)
-            
-        # 使用 TF-IDF 计算相似度
-        vectorizer = TfidfVectorizer()
-        try:
-            tfidf_matrix = vectorizer.fit_transform([query] + texts)
-            similarities = cosine_similarity(tfidf_matrix[0:1], tfidf_matrix[1:])[0]
-            
-            # 获取最相关的文档
-            top_indices = np.argsort(similarities)[-top_k:][::-1]
-            
-            # 构建上下文
-            context = ""
-            for idx in top_indices:
-                context += f"来源: {urls[idx]}\n"
-                context += f"内容: {texts[idx]}\n\n"
+        # 构建上下文
+        context = ""
+        for item in self.content_data:
+            context += f"来源: {item['url']}\n"
+            context += f"标题: {item['title']}\n"
+            context += f"内容: {item['text']}\n\n"
                 
-            return context
-        except Exception as e:
-            print(f"创建上下文时出错: {e}")
-            return ""
+        return context
             
     def generate_answer(self, query: str, max_tokens: int = 1000) -> str:
         """生成答案"""
@@ -80,30 +59,42 @@ class LLMGenerator:
             return "抱歉，无法找到相关信息。"
             
         # 构建提示
-        prompt = f"""请仔细阅读并分析以下上下文信息，然后回答用户的问题。在回答时，请遵循以下要求：
+        prompt = f"""Carefully read and analyze the following contextual information, then answer the user's question. Please follow these guidelines when responding:
 
-1. 深入理解上下文：
-   - 仔细阅读每个来源的内容
-   - 注意关键细节和重要信息
-   - 理解不同来源之间的关联和差异
+1. Thoroughly understand the context:
 
-2. 综合分析：
-   - 整合不同来源的信息
-   - 识别共同点和差异点
-   - 评估信息的可靠性和相关性
+- Carefully review the content from each source
 
-3. 回答要求：
-   - 基于上下文提供全面、准确的回答
-   - 清晰标注信息来源
-   - 如果信息不足，请明确指出并说明原因
-   - 保持回答的客观性和专业性
+- Pay close attention to key details and important facts
 
-上下文信息：
+- Understand the relationships and differences between sources
+
+2. Synthesize and analyze:
+
+- Integrate information from different sources
+
+- Identify similarities and differences
+
+3. Assess the reliability and relevance of the information
+
+4. Answering requirements:
+
+- Provide a comprehensive and accurate response based on the context
+
+- Clearly cite the sources of information
+
+- If information is insufficient, explicitly state the reason
+
+- Maintain objectivity and professionalism
+
+Context:
 {context}
 
-问题：{query}
+Question:
+{query}
 
-请提供经过深思熟虑的详细回答。"""
+Please provide a thoughtful and detailed answer.
+"""
 
         try:
             response = self.client.chat.completions.create(

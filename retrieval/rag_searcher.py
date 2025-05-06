@@ -3,26 +3,21 @@ import os
 from typing import List, Dict
 import requests
 import time
+from dotenv import load_dotenv
 
 class RAGSearcher:
-    def __init__(self, api_key: str, max_results: int = 5):
-        self.api_key = api_key
+    def __init__(self, api_key: str = None, max_results: int = 5):
+        load_dotenv()
+        self.api_key = api_key or os.getenv("BING_SEARCH_V7_SUBSCRIPTION_KEY")
+        if not self.api_key:
+            raise ValueError("Bing Search API key is required. Please set it in the .env file or pass it as a parameter.")
+        
+        self.endpoint = os.getenv("BING_SEARCH_V7_ENDPOINT", "https://api.bing.microsoft.com")
         self.max_results = max_results
-        # 确保输出目录存在
-        os.makedirs("retrieval_outputs", exist_ok=True)
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.output_dir = os.path.join(self.PROJECT_ROOT, "retrieval/outputs")
         self.search_results = {}
-        
-        # 设置 SerpAPI 密钥
-        if api_key is None:
-            api_key = os.getenv("SERPAPI_API_KEY")
-            if not api_key:
-                raise ValueError("请提供 SerpAPI 密钥或设置环境变量 SERPAPI_API_KEY")
-        
-        self.serpapi_key = api_key
-        self.base_url = "https://serpapi.com/search"
         
     def load_tree_paths(self) -> List[List[str]]:
         """从 tree_paths.json 加载所有路径"""
@@ -40,30 +35,39 @@ class RAGSearcher:
         return results
     
     def _perform_search(self, query: str) -> List[Dict]:
-        """使用 SerpAPI 执行搜索"""
+        """使用 Bing Search API 执行搜索"""
         results = []
         try:
+            # 构建请求头
+            headers = {
+                "Ocp-Apim-Subscription-Key": self.api_key
+            }
+            
             # 构建请求参数
             params = {
-                "api_key": self.serpapi_key,
                 "q": query,
-                "engine": "google",  # 使用 Google 搜索引擎
-                "num": self.max_results,  # 获取前 max_results 个结果
+                "count": self.max_results,
+                "responseFilter": "Webpages",
+                "textFormat": "Raw"
             }
             
             # 发送请求
-            response = requests.get(self.base_url, params=params)
+            response = requests.get(
+                f"{self.endpoint}/v7.0/search",
+                headers=headers,
+                params=params
+            )
             response.raise_for_status()  # 检查请求是否成功
             
             # 解析结果
             data = response.json()
             
             # 处理搜索结果
-            if "organic_results" in data:
-                for result in data["organic_results"]:
+            if "webPages" in data and "value" in data["webPages"]:
+                for result in data["webPages"]["value"]:
                     results.append({
-                        "title": result.get("title", ""),
-                        "url": result.get("link", ""),
+                        "title": result.get("name", ""),
+                        "url": result.get("url", ""),
                         "snippet": result.get("snippet", ""),
                         "position": result.get("position", 0)
                     })
@@ -72,7 +76,7 @@ class RAGSearcher:
             time.sleep(1)
             
         except requests.exceptions.RequestException as e:
-            print(f"SerpAPI 请求出错: {e}")
+            print(f"Bing Search API 请求出错: {e}")
         except Exception as e:
             print(f"处理搜索结果时出错: {e}")
         
@@ -96,8 +100,9 @@ class RAGSearcher:
         self.save_search_results()
 
 def main():
-    # 使用提供的 API 密钥
-    api_key = "serpapi(search api)"
+    # 使用环境变量获取 API 密钥
+    load_dotenv()
+    api_key = os.getenv("BING_SEARCH_V7_SUBSCRIPTION_KEY")
     searcher = RAGSearcher(api_key=api_key)
     searcher.process_all_paths()
 
