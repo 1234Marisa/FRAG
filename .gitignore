@@ -47,4 +47,6 @@ answer_generator/outputs/
 Thumbs.db
 
 #data
-data/
+data/ultrachat_200k/
+.data/
+
