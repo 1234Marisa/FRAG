@@ -1,13 +1,75 @@
-# Environment variables
-.env
+# # Environment variables
+# .env
 
-# Python
+# # Python
+# __pycache__/
+# *.py[cod]
+# *$py.class
+# *.so
+# .Python
+# env/
+# build/
+# develop-eggs/
+# dist/
+# downloads/
+# eggs/
+# .eggs/
+# lib/
+# lib64/
+# parts/
+# sdist/
+# var/
+# *.egg-info/
+# .installed.cfg
+# *.egg
+
+# # Virtual Environment
+# venv/
+# ENV/
+
+# # IDE
+# .idea/
+# .vscode/
+# *.swp
+# *.swo
+
+# # Output directories
+# outputs/
+# aspects_outputs/
+# retrieval/outputs/
+# answer_generator/outputs/
+
+# # Logs
+# *.log
+
+# # 系统文件
+# .DS_Store
+# Thumbs.db
+
+# #data
+# data/ultrachat_200k/
+# .data/
+
+
+
+# =========================
+# 🌍 Environment Variables
+# =========================
+.env
+*.env
+
+# =========================
+# 🐍 Python Compiled Files
+# =========================
 __pycache__/
 *.py[cod]
 *$py.class
 *.so
 .Python
-env/
+
+# =========================
+# 📦 Build System
+# =========================
 build/
 develop-eggs/
 dist/
@@ -23,30 +85,76 @@ var/
 .installed.cfg
 *.egg
 
-# Virtual Environment
+# =========================
+# 🔁 Virtual Environments
+# =========================
+env/
 venv/
 ENV/
+.venv/
 
-# IDE
+# =========================
+# 🧠 Machine Learning Files
+# =========================
+*.h5
+*.pt
+*.pth
+*.ckpt
+*.pb
+*.onnx
+*.tflite
+*.npz
+*.pkl
+*.joblib
+
+# =========================
+# 🧪 Jupyter & Experiments
+# =========================
+.ipynb_checkpoints/
+*.ipynb
+
+# =========================
+# 🔧 IDEs and Editors
+# =========================
 .idea/
 .vscode/
 *.swp
 *.swo
 
-# Output directories
+# =========================
+# 📤 Output / Generated Files
+# =========================
 outputs/
 aspects_outputs/
 retrieval/outputs/
 answer_generator/outputs/
-
-# Logs
 *.log
 
-# 系统文件
+# =========================
+# 📁 Data Files
+# =========================
+data/
+data/ultrachat_200k/
+.data/
+*.csv
+*.tsv
+*.jsonl
+*.json
+*.txt
+*.zip
+*.tar
+*.gz
+
+# =========================
+# 💻 System Files
+# =========================
 .DS_Store
 Thumbs.db
 
-#data
+# =========================
+# 📁 Data Files
+# =========================
+data/
 data/ultrachat_200k/
 .data/
 

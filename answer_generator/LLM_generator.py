@@ -16,8 +16,7 @@ class LLMGenerator:
         
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/refined_content.json")
-        
+        self.content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/selected_contents.json")
         # 加载内容
         self.content_data = self._load_content_data()
         
