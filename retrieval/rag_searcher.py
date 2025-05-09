@@ -17,7 +17,7 @@ class RAGSearcher:
         self.max_results = max_results
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.output_dir = os.path.join(self.PROJECT_ROOT, "retrieval/outputs")
+        self.output_dir = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/urls")
         self.search_results = {}
         
         # 初始化OpenAI客户端

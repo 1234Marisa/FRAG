@@ -64,7 +64,7 @@ class PageCrawler:
         
         for attempt in range(max_retries):
             try:
-                print(f"正在加载页面 ({attempt + 1}/{max_retries}): {url}")
+                print(f"Crawling page ({attempt + 1}/{max_retries}): {url}")
                 async with self.semaphore:  # 限制并发数
                     async with session.get(url, headers=headers, proxy=proxy, timeout=10) as response:
                         response.raise_for_status()
@@ -95,7 +95,7 @@ class PageCrawler:
                 
                 # 检查是否成功提取到内容
                 if not text or len(text) < 50:
-                    print(f"提取的内容过少，尝试重试 ({attempt + 1}/{max_retries})")
+                    print(f"Extracted content too short, retrying ({attempt + 1}/{max_retries})")
                     await asyncio.sleep(1)
                     continue
                 
@@ -107,7 +107,7 @@ class PageCrawler:
                 }
                 
             except Exception as e:
-                print(f"提取文章内容时出错 ({attempt + 1}/{max_retries}): {e}")
+                print(f"Error while extracting article content ({attempt + 1}/{max_retries}): {e}")
                 if attempt < max_retries - 1:
                     await asyncio.sleep(1)
                     continue
@@ -117,14 +117,14 @@ class PageCrawler:
     async def crawl_url(self, url: str, session: aiohttp.ClientSession) -> Optional[Dict]:
         """异步抓取单个URL的内容"""
         if not self._is_valid_url(url):
-            print(f"无效的URL: {url}")
+            print(f"Invalid URL: {url}")
             return None
             
         if url in self.crawled_urls:
-            print(f"URL已抓取过: {url}")
+            print(f"URL already crawled: {url}")
             return self.content_results.get(url)
             
-        print(f"正在抓取: {url}")
+        print(f"Crawling: {url}")
         content = await self._get_article_content(url, session)
         
         if content:
@@ -140,20 +140,19 @@ class PageCrawler:
             tasks = [self.crawl_url(url, session) for url in urls]
             await asyncio.gather(*tasks)
             
-    async def process_all_urls(self, urls: List[str] = None):
-        """处理所有URL的主函数"""
-        if urls is None:
-            # 从检索结果中获取URL
-            urls = self._load_urls_from_search_results()
-            
+    async def process_all_urls(self, question_id: int):
+        """处理指定问题的所有URL"""
+        # 从检索结果中获取URL
+        urls = self._load_urls_from_search_results(question_id)
+        
         # 运行异步任务
         await self.process_urls(urls)
             
-    def _load_urls_from_search_results(self) -> List[str]:
+    def _load_urls_from_search_results(self, question_id: int) -> List[str]:
         """从检索结果中加载URL"""
         try:
-            search_results_path = os.path.join(self.output_dir, "search_results.json")
-            print(f"正在从 {search_results_path} 加载检索结果...")
+            search_results_path = os.path.join(self.output_dir, "urls", f"search_results_question_{question_id}.json")
+            print(f"Loading search results from {search_results_path}...")
             
             with open(search_results_path, 'r', encoding='utf-8') as f:
                 search_results = json.load(f)
@@ -164,40 +163,45 @@ class PageCrawler:
                     if 'url' in result:
                         urls.add(result['url'])
                         
-            print(f"成功加载 {len(urls)} 个URL")
+            print(f"Successfully loaded {len(urls)} URLs")
             return list(urls)
         except Exception as e:
-            print(f"加载检索结果时出错: {e}")
+            print(f"Error while loading search results: {e}")
             return []
             
-    def save_content_results(self, filename: str = "content_results.json"):
+    def save_content_results(self, question_id: int):
         """保存抓取的内容结果"""
-        filepath = os.path.join(self.output_dir, filename)
+        filepath = os.path.join(self.output_dir, "contents", f"content_results_question_{question_id}.json")
         with open(filepath, 'w', encoding='utf-8') as f:
             json.dump(self.content_results, f, ensure_ascii=False, indent=2)
-        print(f"内容结果已保存到: {filepath}")
+        print(f"Content results saved to: {filepath}")
         
-    def load_content_results(self, filename: str = "content_results.json") -> Dict:
-        """加载已保存的内容结果"""
-        filepath = os.path.join(self.output_dir, filename)
-        try:
-            with open(filepath, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except Exception as e:
-            print(f"加载内容结果时出错: {e}")
-            return {}
+    def get_all_question_ids(self) -> List[int]:
+        """获取所有问题文件夹的ID"""
+        aspects_outputs_dir = os.path.join(self.PROJECT_ROOT, "aspects_generation/aspects_outputs")
+        question_dirs = [d for d in os.listdir(aspects_outputs_dir) if d.startswith("question_")]
+        return [int(d.split("_")[1]) for d in question_dirs]
+
+    async def process_all_questions(self):
+        """处理所有问题的URL"""
+        question_ids = self.get_all_question_ids()
+        print(f"Found {len(question_ids)} questions to process")
+        
+        for question_id in question_ids:
+            print(f"\nProcessing question {question_id}...")
+            self.crawled_urls = set()  # 清空已爬取的URL
+            self.content_results = {}  # 清空内容结果
+            await self.process_all_urls(question_id)
+            self.save_content_results(question_id)
 
 async def main():
     # 创建爬虫实例
     crawler = PageCrawler()
     
-    # 处理所有URL
-    await crawler.process_all_urls()
+    # 处理所有问题
+    await crawler.process_all_questions()
     
-    # 保存结果
-    crawler.save_content_results()
-    
-    print("网页内容抓取完成！")
+    print("Web page crawling completed!")
 
 if __name__ == "__main__":
     asyncio.run(main()) 

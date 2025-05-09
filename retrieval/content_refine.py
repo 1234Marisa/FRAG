@@ -12,6 +12,9 @@ class ContentRefiner:
         self.model = "gpt-4o"
         self.max_tokens = 2000  # 每个内容的最大token数
         self.min_content_length = 100  # 最小内容长度
+        # 获取项目根目录
+        self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.output_dir = os.path.join(self.PROJECT_ROOT, "retrieval/outputs")
         
     def clean_text(self, text: str) -> str:
         """清理文本，去除无意义内容"""
@@ -47,9 +50,7 @@ Requirements:
 
 3. Use clear and concise language
 
-4. Keep the summary to roughly one-third the length of the original
-
-5. Ensure logical coherence throughout
+4. Ensure logical coherence throughout
 
 Please output only the summarized content without any additional explanation.
 """
@@ -87,17 +88,28 @@ Please output only the summarized content without any additional explanation.
             'crawl_time': content_item.get('crawl_time', '')
         }
     
-    def refine_contents(self, input_file: str, output_file: str):
-        """处理所有内容"""
-        print(f"开始处理文件: {input_file}")
+    def refine_contents(self, question_id: int):
+        """处理指定问题的所有内容"""
+        print(f"开始处理问题 {question_id} 的内容")
+        
+        # 构建输入输出文件路径
+        input_file = os.path.join(self.output_dir, "contents", f"content_results_question_{question_id}.json")
+        output_file = os.path.join(self.output_dir, "refined_contents", f"refined_content_question_{question_id}.json")
+        
+        # 确保输出目录存在
+        os.makedirs(os.path.dirname(output_file), exist_ok=True)
         
         # 读取原始内容
-        with open(input_file, 'r', encoding='utf-8') as f:
-            contents = json.load(f)
+        try:
+            with open(input_file, 'r', encoding='utf-8') as f:
+                contents = json.load(f)
+        except Exception as e:
+            print(f"读取文件 {input_file} 时出错: {e}")
+            return
         
         # 处理每个内容项
         refined_contents = []
-        for url, item in tqdm(contents.items(), desc="处理内容"):
+        for url, item in tqdm(contents.items(), desc=f"处理问题 {question_id} 的内容"):
             # 确保item是字典类型
             if isinstance(item, dict):
                 item['url'] = url  # 补充url字段
@@ -108,15 +120,27 @@ Please output only the summarized content without any additional explanation.
                 print(f"警告: 跳过非字典格式的内容项: {url}")
         
         # 保存处理后的内容
-        output_dir = os.path.dirname(output_file)
-        os.makedirs(output_dir, exist_ok=True)
-        
         with open(output_file, 'w', encoding='utf-8') as f:
             json.dump(refined_contents, f, ensure_ascii=False, indent=2)
         
-        print(f"处理完成，结果保存到: {output_file}")
+        print(f"问题 {question_id} 处理完成，结果保存到: {output_file}")
         print(f"原始内容数量: {len(contents)}")
         print(f"处理后内容数量: {len(refined_contents)}")
+
+    def get_all_question_ids(self) -> List[int]:
+        """获取所有问题文件夹的ID"""
+        aspects_outputs_dir = os.path.join(self.PROJECT_ROOT, "aspects_generation/aspects_outputs")
+        question_dirs = [d for d in os.listdir(aspects_outputs_dir) if d.startswith("question_")]
+        return [int(d.split("_")[1]) for d in question_dirs]
+
+    def process_all_questions(self):
+        """处理所有问题的内容"""
+        question_ids = self.get_all_question_ids()
+        print(f"找到 {len(question_ids)} 个问题需要处理")
+        
+        for question_id in question_ids:
+            print(f"\n处理问题 {question_id}...")
+            self.refine_contents(question_id)
 
 def main():
     # 使用环境变量中的API密钥
@@ -127,12 +151,8 @@ def main():
     # 创建内容精炼器实例
     refiner = ContentRefiner(api_key)
     
-    # 设置输入输出文件路径
-    input_file = "retrieval/outputs/content_results.json"
-    output_file = "retrieval/outputs/refined_content.json"
-    
-    # 处理内容
-    refiner.refine_contents(input_file, output_file)
+    # 处理所有问题
+    refiner.process_all_questions()
 
 if __name__ == "__main__":
     main()
