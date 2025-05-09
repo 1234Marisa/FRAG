@@ -13,7 +13,7 @@ class AspectGenerator:
         print(f"正在为 '{parent_aspect}' 生成子角度...")
         prompt = f"""
 You are an expert in analyzing questions from multiple perspectives.
-Given the parent aspect: "{parent_aspect}", generate EXACTLY 5 key sub-aspects that are:
+Given the parent aspect: "{parent_aspect}", generate EXACTLY 3 key sub-aspects that are:
 1. Directly relevant to the parent aspect
 2. Mutually exclusive
 3. Collectively exhaustive
