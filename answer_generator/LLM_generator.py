@@ -16,111 +16,84 @@ class LLMGenerator:
         
         # 获取项目根目录
         self.PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        self.content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/selected_contents.json")
-        # 加载内容
-        self.content_data = self._load_content_data()
         
-    def _load_content_data(self) -> List[Dict]:
-        """加载精炼后的内容数据"""
+    def _load_content_data(self, question_id: int) -> List[Dict]:
+        """加载指定问题的精炼后内容数据"""
+        content_path = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/refined_contents", f"refined_content_question_{question_id}.json")
         try:
-            with open(self.content_path, 'r', encoding='utf-8') as f:
+            with open(content_path, 'r', encoding='utf-8') as f:
                 return json.load(f)
-        except FileNotFoundError:
-            print(f"警告：找不到内容文件 {self.content_path}")
-            return []
-        except json.JSONDecodeError:
-            print(f"警告：内容文件 {self.content_path} 格式错误")
-            return []
         except Exception as e:
-            print(f"警告：加载内容数据时出错: {e}")
+            print(f"加载问题 {question_id} 的内容数据时出错: {e}")
             return []
             
-    def _create_context(self, query: str) -> str:
+    def _create_context(self, content_data: List[Dict]) -> str:
         """创建上下文"""
-        if not self.content_data:
+        if not content_data:
             return ""
             
         # 构建上下文
         context = ""
-        for item in self.content_data:
+        for item in content_data:
             context += f"来源: {item['url']}\n"
             context += f"标题: {item['title']}\n"
             context += f"内容: {item['text']}\n\n"
                 
         return context
             
-    def generate_answer(self, query: str, max_tokens: int = 1000) -> str:
+    def generate_answer(self, question_id: int, query: str, max_tokens: int = 1000) -> str:
         """生成答案"""
+        # 加载内容数据
+        content_data = self._load_content_data(question_id)
+        
         # 创建上下文
-        context = self._create_context(query)
+        context = self._create_context(content_data)
         
         if not context:
             return "抱歉，无法找到相关信息。"
             
         # 构建提示
-        prompt = f"""Carefully read and analyze the following contextual information, then answer the user's question. Please follow these guidelines when responding:
+        prompt = f"""Based on the following reference information, please answer the user's question. Make sure that your response:
 
-1. Thoroughly understand the context:
+Fully considers and integrates the reference information
 
-- Carefully review the content from each source
+Is written in clear and concise language
 
-- Pay close attention to key details and important facts
+Directly addresses the requirements of the question
 
-- Understand the relationships and differences between sources
-
-2. Synthesize and analyze:
-
-- Integrate information from different sources
-
-- Identify similarities and differences
-
-3. Assess the reliability and relevance of the information
-
-4. Answering requirements:
-
-- Provide a comprehensive and accurate response based on the context
-
-- Clearly cite the sources of information
-
-- If information is insufficient, explicitly state the reason
-
-- Maintain objectivity and professionalism
-
-Context:
+Reference Information:
 {context}
 
 Question:
 {query}
 
-Please provide a thoughtful and detailed answer.
+Please provide your answer.
 """
 
         try:
             response = self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "你是一个专业的分析助手，擅长深入理解文本内容并进行综合分析。你的回答应该基于提供的上下文信息，保持客观和专业。"},
+                    {"role": "system", "content": "You are a professional analysis assistant, skilled at deeply understanding the text content and conducting comprehensive analysis. Your response should be based on the provided context information and remain objective and professional."},
                     {"role": "user", "content": prompt}
                 ],
                 max_tokens=max_tokens,
                 temperature=0.7
             )
-            
             return response.choices[0].message.content
-            
         except Exception as e:
             print(f"生成答案时出错: {e}")
             return "抱歉，生成答案时出现错误。"
             
-    def save_answer(self, query: str, answer: str, filename: str = "answer.json"):
+    def save_answer(self, question_id: int, query: str, answer: str):
         """保存答案"""
         try:
-            output_dir = os.path.join(self.PROJECT_ROOT, "answer_generator/outputs")
+            output_dir = os.path.join(self.PROJECT_ROOT, "answer_generator/outputs", f"question_{question_id}")
             os.makedirs(output_dir, exist_ok=True)
             
-            filepath = os.path.join(output_dir, filename)
+            filepath = os.path.join(output_dir, "answer.json")
             data = {
-                "query": query,
+                "question": query,
                 "answer": answer,
                 "timestamp": time.strftime("%Y-%m-%d %H:%M:%S")
             }
@@ -133,6 +106,70 @@ Please provide a thoughtful and detailed answer.
         except Exception as e:
             print(f"保存答案时出错: {e}")
 
+    def get_content_files_count(self) -> int:
+        """获取contents目录中的文件数量"""
+        contents_dir = os.path.join(self.PROJECT_ROOT, "retrieval/outputs/contents")
+        try:
+            files = [f for f in os.listdir(contents_dir) if f.startswith("content_results_question_")]
+            return len(files)
+        except Exception as e:
+            print(f"获取文件数量时出错: {e}")
+            return 0
+
+    def load_questions_from_jsonl(self, jsonl_path: str, count: int) -> List[str]:
+        """从JSONL文件按顺序加载指定数量的问题"""
+        questions = []
+        try:
+            with open(jsonl_path, 'r', encoding='utf-8') as f:
+                for i, line in enumerate(f):
+                    if i >= count:
+                        break
+                    data = json.loads(line)
+                    # 检查数据格式并打印
+                    print(f"读取第 {i+1} 行数据: {data}")
+                    # 获取问题字段
+                    question = data.get("prompt", "")
+                    if not question:
+                        print(f"警告：第 {i+1} 行数据中没有找到问题字段")
+                        continue
+                    questions.append(question)
+                    print(f"成功读取问题: {question}")
+        except Exception as e:
+            print(f"读取JSONL文件时出错: {e}")
+        return questions
+
+    def process_all_questions(self):
+        """处理所有问题"""
+        # 获取contents目录中的文件数量
+        file_count = self.get_content_files_count()
+        if file_count == 0:
+            print("未找到任何内容文件")
+            return
+            
+        print(f"找到 {file_count} 个内容文件")
+        
+        # 从JSONL文件加载对应数量的问题
+        jsonl_path = os.path.join(self.PROJECT_ROOT, "data/ultrachat_200k/short_prompt_ultrachat_200k_train_gen.jsonl")
+        print(f"正在从文件读取问题: {jsonl_path}")
+        questions = self.load_questions_from_jsonl(jsonl_path, file_count)
+        
+        if not questions:
+            print("未能从JSONL文件加载到任何问题")
+            return
+            
+        print(f"从JSONL文件加载了 {len(questions)} 个问题")
+        
+        # 处理每个问题
+        for i, question in enumerate(questions, 1):
+            print(f"\n处理问题 {i}...")
+            print(f"当前问题: {question}")
+            
+            # 生成答案
+            answer = self.generate_answer(i, question)
+            
+            # 保存答案
+            self.save_answer(i, question, answer)
+
 def main():
     # 使用环境变量获取 API 密钥
     load_dotenv()
@@ -141,47 +178,8 @@ def main():
     # 创建生成器实例
     generator = LLMGenerator(api_key=api_key)
     
-    # 读取问题
-    questions_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), "data", "questions.json")
-    try:
-        with open(questions_path, 'r', encoding='utf-8') as f:
-            questions_data = json.load(f)
-    except Exception as e:
-        print(f"读取问题文件时出错: {e}")
-        return
-    
-    # 显示可用问题
-    print("\n可用的问题：")
-    for q in questions_data["questions"]:
-        print(f"{q['id']}. {q['question']}")
-    
-    # 让用户选择问题
-    try:
-        question_id = int(input("\n请选择问题ID："))
-    except ValueError:
-        print("请输入有效的数字ID")
-        return
-    
-    # 获取选中的问题
-    selected_question = None
-    for q in questions_data["questions"]:
-        if q["id"] == question_id:
-            selected_question = q["question"]
-            break
-    
-    if not selected_question:
-        print(f"未找到ID为 {question_id} 的问题")
-        return
-    
-    # 生成答案
-    answer = generator.generate_answer(selected_question)
-    
-    # 打印答案
-    print("\n答案：")
-    print(answer)
-    
-    # 保存答案
-    generator.save_answer(selected_question, answer)
+    # 处理所有问题
+    generator.process_all_questions()
 
 if __name__ == "__main__":
     main() 
